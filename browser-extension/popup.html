@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Phish Hunter AI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"
+        rel="stylesheet" />
+    <link rel="stylesheet" href="popup.css" />
+</head>
+
+<body>
+    <div class="popup-container">
+        <!-- Header -->
+        <header class="popup-header">
+            <div class="header-left">
+                <img src="icons/icon-48.png" alt="Phish Hunter AI" class="logo" />
+                <div>
+                    <h1 class="app-title">Phish Hunter <span class="title-ai">AI</span></h1>
+                    <p class="app-sub">Scam Detection</p>
+                </div>
+            </div>
+            <button id="btn-scan-page" class="btn-scan-page" title="Analyze current page URL">
+                🌐 Scan Page
+            </button>
+        </header>
+
+        <!-- Input -->
+        <div class="input-section">
+            <textarea id="popup-input" class="popup-textarea"
+                placeholder="Paste suspicious text, URL, or email here…&#10;&#10;Or select text on any webpage, right-click, and choose &quot;Analyze with Phish Hunter AI&quot;"
+                maxlength="3000"></textarea>
+            <div class="char-count"><span id="char-count">0</span> / 3000</div>
+        </div>
+
+        <!-- Analyze Button -->
+        <button id="btn-analyze" class="btn-analyze" disabled>
+            <span id="btn-text">🔍 Analyze</span>
+            <span id="btn-spinner" class="spinner hidden"></span>
+        </button>
+
+        <!-- Result -->
+        <div id="result-section" class="result-section hidden">
+            <div class="result-top">
+                <!-- Ring -->
+                <div class="ring-container">
+                    <svg viewBox="0 0 80 80" width="80" height="80">
+                        <circle class="ring-bg" cx="40" cy="40" r="32" />
+                        <circle id="ring-fill" class="ring-fill" cx="40" cy="40" r="32" stroke-dasharray="201.06"
+                            stroke-dashoffset="201.06" />
+                    </svg>
+                    <div class="ring-label">
+                        <span id="prob-text" class="prob-num">0%</span>
+                        <span class="prob-sub">scam</span>
+                    </div>
+                </div>
+                <!-- Info -->
+                <div class="result-info">
+                    <span id="risk-badge" class="risk-badge">—</span>
+                    <p id="result-title" class="result-title"></p>
+                </div>
+            </div>
+
+            <!-- Explanation -->
+            <div class="explanation-box">
+                <div class="box-label">🔍 Explanation</div>
+                <p id="explanation-text"></p>
+            </div>
+
+            <!-- Tags -->
+            <div id="tags-container" class="tags-container"></div>
+        </div>
+
+        <!-- Error -->
+        <div id="error-box" class="error-box hidden">
+            <span>⚠️</span>
+            <span id="error-text"></span>
+        </div>
+
+        <!-- Footer -->
+        <footer class="popup-footer">
+            <a href="http://localhost:5173" target="_blank" id="open-fullapp">Open Full App ↗</a>
+        </footer>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+
+</html>
