@@ -81,12 +81,25 @@ async function analyze() {
             body: JSON.stringify({ text }),
         });
 
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Analysis failed');
+        // Get response text first to handle empty or non-JSON responses
+        const responseText = await res.text();
+
+        if (!responseText || !responseText.trim()) {
+            throw new Error('Empty response from server. Make sure Flask is running on port 5000.');
+        }
+
+        let data;
+        try {
+            data = JSON.parse(responseText);
+        } catch (parseError) {
+            throw new Error(`Server returned invalid response: ${responseText.substring(0, 100)}`);
+        }
+
+        if (!res.ok) throw new Error(data.error || `Analysis failed with status ${res.status}`);
 
         showResult(data);
     } catch (err) {
-        if (err.message.includes('fetch')) {
+        if (err.message.includes('fetch') || err.message.includes('Failed to fetch')) {
             showError('Cannot reach Phish Hunter AI server. Make sure Flask is running on port 5000.');
         } else {
             showError(err.message);

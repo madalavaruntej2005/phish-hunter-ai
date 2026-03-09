@@ -72,10 +72,23 @@ export default function App() {
                 body: JSON.stringify({ text: inputText.trim() }),
             })
 
-            const data = await response.json()
+            // Get response text first to handle empty or non-JSON responses
+            const responseText = await response.text()
+
+            if (!responseText || !responseText.trim()) {
+                throw new Error('Empty response from server. Please make sure the backend is running.')
+            }
+
+            let data
+            try {
+                data = JSON.parse(responseText)
+            } catch (parseError) {
+                // Server returned non-JSON response (like an error page)
+                throw new Error(`Server returned invalid response: ${responseText.substring(0, 100)}`)
+            }
 
             if (!response.ok) {
-                throw new Error(data.error || 'Analysis failed. Please try again.')
+                throw new Error(data.error || `Analysis failed with status ${response.status}`)
             }
 
             setResult(data)
