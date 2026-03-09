@@ -65,6 +65,20 @@ def health():
     return jsonify({"status": "ok", "service": "Phish Hunter AI"}), 200
 
 
+@app.route("/", methods=["GET"])
+def index():
+    """Root endpoint - API info."""
+    return jsonify({
+        "service": "Phish Hunter AI",
+        "version": "1.0.0",
+        "endpoints": {
+            "POST /api/analyze": "Analyze text for phishing (body: {\"text\": \"message\"})",
+            "GET /api/health": "Health check",
+            "POST /api/retrain": "Retrain the model (admin)"
+        }
+    }), 200
+
+
 if __name__ == "__main__":
     # Warm up model on startup
     print("🚀 Starting Phish Hunter AI backend...")
