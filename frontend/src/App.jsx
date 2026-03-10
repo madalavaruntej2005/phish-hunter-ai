@@ -3,8 +3,8 @@ import './index.css'
 import ResultCard from './components/ResultCard.jsx'
 
 // In production (Vercel), VITE_API_URL is set to the Render backend URL.
-// In local dev, it falls back to '' so Vite proxy forwards /api → localhost:5000.
-const API_BASE = import.meta.env.VITE_API_URL || ''
+// In local dev, use localhost:5000 directly to avoid proxy issues.
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000'
 
 
 const EXAMPLE_INPUTS = [

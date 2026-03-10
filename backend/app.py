@@ -15,11 +15,16 @@ _frontend_url = os.environ.get("ALLOWED_ORIGIN", "")
 _origins = [
     "http://localhost:5173",
     "http://localhost:3000",
+    "http://localhost:5000",
     "chrome-extension://*",
     "moz-extension://*",
 ]
+# Add any custom origin (for production deployments)
 if _frontend_url:
     _origins.append(_frontend_url)
+# Allow all origins in production for flexibility
+if os.environ.get("FLASK_ENV") == "production":
+    _origins = ["*"]
 
 CORS(app, resources={r"/api/*": {"origins": _origins}}, supports_credentials=False)
 
