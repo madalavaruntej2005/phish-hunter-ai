@@ -40,6 +40,30 @@ URGENCY_PHRASES = [
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "phish_model.pkl")
 
+import sqlite3
+
+FEEDBACK_DB = os.path.join(os.path.dirname(__file__), "feedback.db")
+
+def init_feedback_db():
+    """Init SQLite table for user feedback."""
+    conn = sqlite3.connect(FEEDBACK_DB)
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS feedback
+                 (id INTEGER PRIMARY KEY, text TEXT, predicted_prob REAL, user_label INTEGER, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+    conn.commit()
+    conn.close()
+
+def save_feedback(text, predicted_prob, user_label):
+    """Save user feedback for model improvement. user_label: 1=phish, 0=safe."""
+    init_feedback_db()
+    conn = sqlite3.connect(FEEDBACK_DB)
+    c = conn.cursor()
+    c.execute("INSERT INTO feedback (text, predicted_prob, user_label) VALUES (?, ?, ?)",
+              (text[:1000], predicted_prob, user_label))  # Truncate text
+    conn.commit()
+    conn.close()
+    print("Feedback saved.")
+
 
 def preprocess(text: str) -> str:
     """Lowercase and normalize text."""
@@ -56,7 +80,8 @@ def extract_features(text: str) -> dict:
 
     suspicious_domains = []
     for pattern in SUSPICIOUS_DOMAIN_PATTERNS:
-        matches = re.findall(pattern, text, re.IGNORECASE)
+        # Use finditer to get full match strings, not capture-group tuples
+        matches = [m.group(0) for m in re.finditer(pattern, text, re.IGNORECASE)]
         suspicious_domains.extend(matches)
 
     urgency_phrases = [ph for ph in URGENCY_PHRASES if ph.lower() in text_lower]
@@ -179,8 +204,12 @@ def analyze(text: str) -> dict:
     # Preprocess & predict
     clean = preprocess(text)
     prob_array = model.predict_proba([clean])[0]
-    # Index 1 = phishing probability
-    phishing_prob = float(prob_array[1])
+    # Index 1 = phishing probability; guard against single-class model
+    if len(prob_array) >= 2:
+        phishing_prob = float(prob_array[1])
+    else:
+        # Model only knows one class — treat as that class's confidence
+        phishing_prob = float(prob_array[0]) if model.classes_[0] == 1 else 0.0
 
     # Extract human-readable features
     features = extract_features(text)
@@ -202,8 +231,10 @@ def analyze(text: str) -> dict:
     # Determine risk level
     if phishing_prob >= 0.70:
         risk_level = "DANGEROUS"
-    elif phishing_prob >= 0.40:
+    elif phishing_prob >= 0.60:
         risk_level = "SUSPICIOUS"
+    elif phishing_prob >= 0.40:
+        risk_level = "REVIEW_NEEDED"
     else:
         risk_level = "SAFE"
 

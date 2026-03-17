@@ -3,34 +3,64 @@ Phish Hunter AI — Flask REST API
 Endpoint: POST /analyze
 """
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, abort, redirect
 from flask_cors import CORS
-from model import analyze, train_model
+from dotenv import load_dotenv
+
+try:
+    from flask_limiter import Limiter
+    from flask_limiter.util import get_remote_address
+    HAS_LIMITER = True
+except ImportError:
+    HAS_LIMITER = False
+    print("Warning: flask-limiter not installed - no rate limiting")
+
+from model import analyze, train_model, save_feedback, get_model
 import os
+
+load_dotenv()
 
 app = Flask(__name__)
 
-# Allow local dev, browser extensions, and deployed frontend (set ALLOWED_ORIGIN on Render)
-_frontend_url = os.environ.get("ALLOWED_ORIGIN", "")
-_origins = [
-    "http://localhost:5173",
-    "http://localhost:3000",
-    "http://localhost:5000",
-    "chrome-extension://*",
-    "moz-extension://*",
-]
-# Add any custom origin (for production deployments)
-if _frontend_url:
-    _origins.append(_frontend_url)
-# Allow all origins in production for flexibility
-if os.environ.get("FLASK_ENV") == "production":
-    _origins = ["*"]
+# --- Rate Limiter (optional) ---
+if HAS_LIMITER:
+    limiter = Limiter(
+        key_func=get_remote_address,
+        app=app,
+        default_limits=["200 per day", "50 per hour"],
+    )
+else:
+    # Stub so route decorators don't crash when HAS_LIMITER is False
+    class _NoOpLimiter:
+        def limit(self, *args, **kwargs):
+            def decorator(f):
+                return f
+            return decorator
+    limiter = _NoOpLimiter()
 
-CORS(app, resources={r"/api/*": {"origins": _origins}}, supports_credentials=False)
+# --- CORS ---
+allowed_origins = os.environ.get(
+    "ALLOWED_ORIGIN",
+    "http://localhost:5173,https://phish-hunter-ai.vercel.app"
+).split(',')
+CORS(app, resources={r"/api/*": {"origins": allowed_origins}}, supports_credentials=False)
 
 
+# --- HTTPS redirect (production only, never for OPTIONS/preflight) ---
+@app.before_request
+def force_https():
+    # Never redirect OPTIONS requests — browsers use them for CORS preflight
+    if request.method == 'OPTIONS':
+        return
+    if os.environ.get("FLASK_ENV") == "production" and not request.is_secure:
+        url = request.url.replace("http://", "https://", 1)
+        return redirect(url, code=301)
+
+
+# --- Routes ---
 
 @app.route("/api/analyze", methods=["POST"])
+@limiter.limit("10 per minute")
 def analyze_text():
     """Analyze submitted text for phishing/scam indicators."""
     data = request.get_json(silent=True)
@@ -52,11 +82,24 @@ def analyze_text():
         return jsonify({"error": f"Analysis failed: {str(e)}"}), 500
 
 
+@app.route("/api/feedback", methods=["POST"])
+def feedback():
+    """User feedback for model improvement."""
+    data = request.get_json(silent=True)
+    if not data or "text" not in data or "is_phish" not in data:
+        return jsonify({"error": "Missing 'text' or 'is_phish'"}), 400
+    text = data["text"][:1000]
+    user_label = 1 if data["is_phish"] else 0
+    save_feedback(text, 0.0, user_label)  # predicted_prob placeholder
+    return jsonify({"message": "Feedback saved. Thanks for helping improve the model!"}), 200
+
+
 @app.route("/api/retrain", methods=["POST"])
 def retrain():
-    """Retrain the model (admin endpoint)."""
-    global _model
-    from model import _model
+    """Retrain the model (admin endpoint - key protected)."""
+    data = request.get_json(silent=True)
+    if not data or data.get("key") != os.environ.get("RETRAIN_KEY"):
+        abort(403)
     try:
         train_model()
         return jsonify({"message": "Model retrained successfully."}), 200
@@ -87,10 +130,8 @@ def index():
 if __name__ == "__main__":
     # Warm up model on startup
     print("🚀 Starting Phish Hunter AI backend...")
-    from model import get_model
     get_model()
     port = int(os.environ.get("PORT", 5000))
     debug = os.environ.get("FLASK_ENV", "development") != "production"
     print(f"✅ API ready at http://localhost:{port}")
     app.run(debug=debug, host="0.0.0.0", port=port)
-

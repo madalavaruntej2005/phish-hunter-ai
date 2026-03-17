@@ -10,4 +10,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const selection = window.getSelection()?.toString().trim() || '';
         sendResponse({ selection });
     }
+    // Return true to keep the message channel open for async sendResponse
+    return true;
 });
