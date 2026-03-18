@@ -3,7 +3,7 @@
  * Handles UI interactions, API calls, and result rendering.
  */
 
-const API_URL = 'https://phish-hunter-ai-backend.onrender.com/api/analyze';
+const API_URL = 'https://phish-hunter-ai.onrender.com/api/analyze';
 const CIRCUMFERENCE = 2 * Math.PI * 32; // r=32
 
 // Elements
