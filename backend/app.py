@@ -60,21 +60,20 @@ else:
     limiter = _NoOpLimiter()
 
 # --- CORS ---
-# Allow Vercel frontend, localhost dev, and browser extension origins
-ALLOWED_ORIGINS = [
-    "https://phish-hunter-ai.vercel.app",
-    "http://localhost:5173",
-    "http://localhost:3000",
-    "null",   # browser extensions send Origin: null
-]
-# Also support any extra origins set via env var
-extra = os.environ.get("ALLOWED_ORIGIN", "")
-if extra:
-    ALLOWED_ORIGINS.extend([o.strip() for o in extra.split(',') if o.strip()])
+import re
 
+# Matches: any *.vercel.app subdomain, localhost on any port, and "null" (browser extensions)
+CORS_ORIGIN_REGEX = re.compile(
+    r'^(https?://[a-z0-9\-]+(\.vercel\.app)|http://localhost(:\d+)?|null)$'
+)
+
+def _is_allowed_origin(origin: str) -> bool:
+    return bool(CORS_ORIGIN_REGEX.match(origin))
+
+# flask-cors with regex origin
 CORS(
     app,
-    resources={r"/api/*": {"origins": ALLOWED_ORIGINS}},
+    resources={r"/api/*": {"origins": CORS_ORIGIN_REGEX}},
     supports_credentials=False,
     allow_headers=["Content-Type", "Authorization"],
     methods=["GET", "POST", "OPTIONS"],
@@ -85,24 +84,26 @@ CORS(
 @app.after_request
 def add_cors_headers(response):
     origin = request.headers.get("Origin", "")
-    if origin in ALLOWED_ORIGINS or not origin:
-        response.headers["Access-Control-Allow-Origin"] = origin or "*"
-    else:
-        response.headers["Access-Control-Allow-Origin"] = "https://phish-hunter-ai.vercel.app"
+    if origin and _is_allowed_origin(origin):
+        response.headers["Access-Control-Allow-Origin"] = origin
+    elif not origin:
+        response.headers["Access-Control-Allow-Origin"] = "*"
+    # Always stamp these — even on error responses
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
     return response
 
 
-# --- Explicit OPTIONS handler for preflight ---
+# --- Explicit OPTIONS handler for preflight (all /api/* routes) ---
 @app.route("/api/analyze", methods=["OPTIONS"])
 @app.route("/api/feedback", methods=["OPTIONS"])
 @app.route("/api/retrain", methods=["OPTIONS"])
 @app.route("/api/health", methods=["OPTIONS"])
 def handle_preflight():
-    """Respond to CORS preflight requests immediately."""
+    """Respond to CORS preflight requests immediately with correct headers."""
     response = app.make_default_options_response()
     return response
+
 
 
 # --- HTTPS redirect (production only, never for OPTIONS/preflight) ---

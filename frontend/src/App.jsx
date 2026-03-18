@@ -35,6 +35,7 @@ export default function App() {
     const [result, setResult] = useState(null)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState(null)
+    const [warmingUp, setWarmingUp] = useState(false)
     const [installPrompt, setInstallPrompt] = useState(null)
     const [showInstallBanner, setShowInstallBanner] = useState(false)
 
@@ -64,39 +65,62 @@ export default function App() {
         setLoading(true)
         setError(null)
         setResult(null)
+        setWarmingUp(false)
 
-        try {
-            const response = await fetch(`${API_BASE}/api/analyze`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: inputText.trim() }),
-            })
+        const MAX_RETRIES = 3
+        let attempt = 0
 
-            // Get response text first to handle empty or non-JSON responses
-            const responseText = await response.text()
-
-            if (!responseText || !responseText.trim()) {
-                throw new Error('Empty response from server. Please make sure the backend is running.')
-            }
-
-            let data
+        while (attempt <= MAX_RETRIES) {
             try {
-                data = JSON.parse(responseText)
-            } catch (parseError) {
-                // Server returned non-JSON response (like an error page)
-                throw new Error(`Server returned invalid response: ${responseText.substring(0, 100)}`)
-            }
+                const response = await fetch(`${API_BASE}/api/analyze`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: inputText.trim() }),
+                })
 
-            if (!response.ok) {
-                throw new Error(data.error || `Analysis failed with status ${response.status}`)
-            }
+                // 503 = Render cold start — wait and retry
+                if (response.status === 503 && attempt < MAX_RETRIES) {
+                    setWarmingUp(true)
+                    await new Promise(r => setTimeout(r, 3000 * (attempt + 1)))
+                    attempt++
+                    continue
+                }
 
-            setResult(data)
-        } catch (err) {
-            setError(err.message || 'Could not connect to the backend. Make sure Flask is running on port 5000.')
-        } finally {
-            setLoading(false)
+                setWarmingUp(false)
+                const responseText = await response.text()
+
+                if (!responseText || !responseText.trim()) {
+                    throw new Error('Empty response from server. Please try again.')
+                }
+
+                let data
+                try {
+                    data = JSON.parse(responseText)
+                } catch {
+                    throw new Error(`Server returned invalid response: ${responseText.substring(0, 100)}`)
+                }
+
+                if (!response.ok) {
+                    throw new Error(data.error || `Analysis failed with status ${response.status}`)
+                }
+
+                setResult(data)
+                break
+            } catch (err) {
+                if (attempt < MAX_RETRIES && (err.name === 'TypeError')) {
+                    // Network/CORS error — backend may be waking
+                    setWarmingUp(true)
+                    await new Promise(r => setTimeout(r, 3000 * (attempt + 1)))
+                    attempt++
+                    continue
+                }
+                setWarmingUp(false)
+                setError(err.message || 'Could not connect to the backend. Please try again in a moment.')
+                break
+            }
         }
+
+        setLoading(false)
     }, [inputText])
 
     const handleKeyDown = (e) => {
@@ -166,7 +190,7 @@ export default function App() {
                     {loading ? (
                         <>
                             <span className="spinner" />
-                            Analyzing…
+                            {warmingUp ? 'Server warming up… retrying' : 'Analyzing…'}
                         </>
                     ) : (
                         <>
@@ -174,6 +198,14 @@ export default function App() {
                         </>
                     )}
                 </button>
+
+                {/* Warm-up notice */}
+                {warmingUp && (
+                    <div className="error-box" role="status" style={{ borderColor: '#f59e0b', color: '#f59e0b' }}>
+                        <span>⏳</span>
+                        <span>Backend is waking up on Render's free tier — this takes ~15 seconds. Retrying automatically…</span>
+                    </div>
+                )}
 
                 {/* Results */}
                 {(result || error) && <div className="divider" />}
