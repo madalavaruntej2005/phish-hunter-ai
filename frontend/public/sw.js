@@ -37,7 +37,26 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // Network-first for API calls, with a fallback for network errors
+    // Bypass service worker entirely for cross-origin API requests (Render backend)
+    if (url.hostname.includes('onrender.com')) {
+        return; // Let browser handle it directly — no SW interception
+    }
+
+    // For non-GET requests (POST etc.), always go to network — never cache
+    if (event.request.method !== 'GET') {
+        event.respondWith(
+            fetch(event.request).catch((error) => {
+                console.error('Service Worker API fetch failed:', error);
+                return new Response(JSON.stringify({ error: 'API is offline. Please try again shortly.' }), {
+                    status: 503,
+                    headers: { 'Content-Type': 'application/json' },
+                });
+            })
+        );
+        return;
+    }
+
+    // Same-origin /api/ paths — network first
     if (url.pathname.startsWith('/api/')) {
         event.respondWith(
             fetch(event.request).catch((error) => {
@@ -50,6 +69,7 @@ self.addEventListener('fetch', (event) => {
         );
         return;
     }
+
 
     // Cache-first for static assets
     event.respondWith(
