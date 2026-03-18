@@ -39,11 +39,49 @@ else:
     limiter = _NoOpLimiter()
 
 # --- CORS ---
-allowed_origins = os.environ.get(
-    "ALLOWED_ORIGIN",
-    "http://localhost:5173,https://phish-hunter-ai.vercel.app"
-).split(',')
-CORS(app, resources={r"/api/*": {"origins": allowed_origins}}, supports_credentials=False)
+# Allow Vercel frontend, localhost dev, and browser extension origins
+ALLOWED_ORIGINS = [
+    "https://phish-hunter-ai.vercel.app",
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "null",   # browser extensions send Origin: null
+]
+# Also support any extra origins set via env var
+extra = os.environ.get("ALLOWED_ORIGIN", "")
+if extra:
+    ALLOWED_ORIGINS.extend([o.strip() for o in extra.split(',') if o.strip()])
+
+CORS(
+    app,
+    resources={r"/api/*": {"origins": ALLOWED_ORIGINS}},
+    supports_credentials=False,
+    allow_headers=["Content-Type", "Authorization"],
+    methods=["GET", "POST", "OPTIONS"],
+)
+
+
+# --- Inject CORS headers on EVERY response (including errors & 503) ---
+@app.after_request
+def add_cors_headers(response):
+    origin = request.headers.get("Origin", "")
+    if origin in ALLOWED_ORIGINS or not origin:
+        response.headers["Access-Control-Allow-Origin"] = origin or "*"
+    else:
+        response.headers["Access-Control-Allow-Origin"] = "https://phish-hunter-ai.vercel.app"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    return response
+
+
+# --- Explicit OPTIONS handler for preflight ---
+@app.route("/api/analyze", methods=["OPTIONS"])
+@app.route("/api/feedback", methods=["OPTIONS"])
+@app.route("/api/retrain", methods=["OPTIONS"])
+@app.route("/api/health", methods=["OPTIONS"])
+def handle_preflight():
+    """Respond to CORS preflight requests immediately."""
+    response = app.make_default_options_response()
+    return response
 
 
 # --- HTTPS redirect (production only, never for OPTIONS/preflight) ---
